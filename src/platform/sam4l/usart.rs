@@ -1,5 +1,5 @@
-use core::marker::Copy;
 use core::intrinsics;
+use sam4l::pm;
 use hil::uart;
 
 #[repr(C, packed)]
@@ -29,87 +29,150 @@ struct UsartRegisters {
     version: u32
 }
 
-const SIZE: usize = 0x4000;
-const BASE_ADDRESS: usize = 0x40024000;
+const SIZE: isize = 0x4000;
+const BASE_ADDRESS: isize = 0x40024000;
 
-repeated_enum!(
-pub enum Location {
-    USART * 4
-});
+static mut NUM_ENABLED : isize = 0;
+
+#[derive(Copy)]
+pub enum BaseAddr {
+    USART0 = BASE_ADDRESS,
+    USART1 = BASE_ADDRESS + SIZE,
+    USART2 = BASE_ADDRESS + SIZE * 2,
+    USART3 = BASE_ADDRESS + SIZE * 3,
+}
 
 #[derive(Copy)]
 pub struct Params {
-    pub location: Location,
+    pub address: BaseAddr,
 }
 
 pub struct USART {
-    regs: &'static mut UsartRegisters
+    registers: &'static mut UsartRegisters,
+    clock_enabled: bool,
+    tx_enabled: bool,
+    rx_enabled: bool
 }
 
 impl USART {
     pub fn new(params: Params) -> USART {
-        let address = BASE_ADDRESS + (params.location as usize) * SIZE;
-
         USART {
-            regs: unsafe { intrinsics::transmute(address) }
+            registers: unsafe { intrinsics::transmute(params.address) },
+            clock_enabled: false,
+            tx_enabled: false,
+            rx_enabled: false
         }
     }
 
-    fn set_baud_rate(&mut self, baud_rate: u32) {
-        let cd = 48000000 / (16 * baud_rate);
-        volatile!(self.regs.brgr = cd);
+    pub fn enable_clock(&mut self) {
+        if self.clock_enabled {
+            return
+        }
+
+        let res = unsafe {
+            let num_enabled: *mut isize = &mut NUM_ENABLED as *mut isize;
+            intrinsics::atomic_xadd(num_enabled, 1)
+        };
+        if res == 0 {
+            pm::enable_pba_clock(11);
+        }
     }
 
-    // This can be made safe by having a struct represent the mode register,
-    // with enums when there are choices and not just numbers, and passing the
-    // struct to this function. As is, it's too easy to make a mistake.
-    unsafe fn set_mode(&mut self, mode: u32) {
-        #![allow(unused_unsafe)]
-        volatile!(self.regs.mr = mode);
+    pub fn disable_clock(&mut self) {
+        if !self.clock_enabled {
+            return
+        }
+
+        let res = unsafe {
+            let num_enabled: *mut isize = &mut NUM_ENABLED as *mut isize;
+            intrinsics::atomic_xsub(num_enabled, 1)
+        };
+        if res == 1 {
+            pm::disable_pba_clock(11);
+        }
+    }
+
+    pub fn set_baud_rate(&mut self, baud_rate: u32) {
+        let cd = 48000000 / (16 * baud_rate);
+        volatile!(self.registers.brgr = cd);
+    }
+
+    pub fn set_mode(&mut self, mode: u32) {
+        volatile!(self.registers.mr = mode);
     }
 
     pub fn rx_ready(&self) -> bool {
-        volatile!(self.regs.csr) & 0b1 != 0
+        volatile!(self.registers.csr) & 0b1 != 0
     }
 
     pub fn tx_ready(&self) -> bool {
-        volatile!(self.regs.csr) & 0b10 != 0
+        volatile!(self.registers.csr) & 0b10 != 0
+    }
+
+    pub fn enable_rx(&mut self) {
+        volatile!(self.registers.cr = 1 << 4);
+        self.rx_enabled = true;
+        self.enable_clock();
+    }
+
+    pub fn disable_rx(&mut self) {
+        volatile!(self.registers.cr = 1 << 5);
+        if !self.tx_enabled {
+            self.disable_clock();
+        }
+    }
+
+    pub fn enable_tx(&mut self) {
+        self.enable_clock();
+        volatile!(self.registers.cr = 1 << 6);
+        self.tx_enabled = true;
+        self.enable_clock();
+    }
+
+    pub fn disable_tx(&mut self) {
+        volatile!(self.registers.cr = 1 << 7);
+        if !self.rx_enabled {
+            self.disable_clock();
+        }
     }
 }
 
 impl uart::UART for USART {
     fn init(&mut self, params: uart::UARTParams) {
+        self.enable_clock();
+
         let chrl = ((params.data_bits - 1) & 0x3) as u32;
-        let mode = 0 /* mode */
+        let mode = 0 /* UART mode */
             | 0 << 4 /*USCLKS*/
             | chrl << 6 /* Character Length */
             | (params.parity as u32) << 9 /* Parity */
             | 0 << 12; /* Number of stop bits = 1 */;
 
-        unsafe { self.set_mode(mode); }
+        self.set_mode(mode);
         self.set_baud_rate(params.baud_rate);
         // Copied from TinyOS, not exactly sure how to generalize
-        volatile!(self.regs.ttgr = 4);
+        volatile!(self.registers.ttgr = 4);
     }
 
     fn send_byte(&mut self, byte: u8) {
         while !self.tx_ready() {}
-        volatile!(self.regs.thr = byte as u32);
+        volatile!(self.registers.thr = byte as u32);
     }
 
-    fn toggle_rx(&mut self, enable: bool) {
-        if enable {
-            volatile!(self.regs.cr = 1 << 4);
-        } else {
-            volatile!(self.regs.cr = 1 << 5);
-        }
+    fn enable_rx(&mut self) {
+        USART::enable_rx(self);
     }
 
-    fn toggle_tx(&mut self, enable: bool) {
-        if enable {
-            volatile!(self.regs.cr = 1 << 6);
-        } else {
-            volatile!(self.regs.cr = 1 << 7);
-        }
+    fn disable_rx(&mut self) {
+        USART::disable_rx(self);
+    }
+
+    fn enable_tx(&mut self) {
+        USART::enable_tx(self);
+    }
+
+    fn disable_tx(&mut self) {
+        USART::disable_tx(self);
     }
 }
+
