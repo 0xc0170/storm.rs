@@ -25,3 +25,4 @@ mod std {
 }
 
 pub mod sam4l;
+pub mod cortex;

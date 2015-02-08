@@ -46,7 +46,10 @@ $(BUILD_DIR):
 # Compiles and adds to $(APP_OBJECTS)
 -include apps/rust/apps.mk
 
-$(BUILD_DIR)/libplugins.dylib: $(call rwildcard,src/plugins/,*.rs) | $(BUILD_DIR)
+platform_docs:
+	rustdoc $(RUSTC_FLAGS) src/platform/lib.rs
+
+$(BUILD_DIR)/libplugins.so: $(call rwildcard,src/plugins/,*.rs) | $(BUILD_DIR)
 	@echo "Building $@"
 	@$(RUSTC) --out-dir $(BUILD_DIR) src/plugins/lib.rs
 
@@ -54,7 +57,7 @@ $(BUILD_DIR)/libdrivers.rlib: $(call rwildcard,src/drivers/,*.rs) $(call libs,co
 	@echo "Building $@"
 	@$(RUSTC) $(RUSTC_FLAGS) -F unsafe-blocks --out-dir $(BUILD_DIR) src/drivers/lib.rs
 
-$(BUILD_DIR)/libplatform.rlib: $(call libs,core hil) $(BUILD_DIR)/libplugins.dylib
+$(BUILD_DIR)/libplatform.rlib: $(call libs,core hil) $(BUILD_DIR)/libplugins.so
 
 .SECONDEXPANSION:
 $(BUILD_DIR)/lib%.rlib: $$(call rwildcard,src/$$**/,*.rs) $(call libs,core) | $(BUILD_DIR)
