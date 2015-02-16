@@ -1,5 +1,5 @@
 RUSTC ?= rustc
-RUSTC_FLAGS += -C opt-level=2 -Z no-landing-pads
+RUSTC_FLAGS += -C opt-level=1 -Z no-landing-pads
 RUSTC_FLAGS += --target config/thumbv7em-none-eabi
 RUSTC_FLAGS += -Ctarget-cpu=cortex-m4 -C relocation_model=static
 RUSTC_FLAGS += -g -C no-stack-check -Lbuild
@@ -71,6 +71,14 @@ $(BUILD_DIR)/%.o: c/%.c | $(BUILD_DIR)
 $(BUILD_DIR)/main.o: $(RUST_SOURCES) $(call libs,core support platform drivers)
 	@echo "Building $@"
 	@$(RUSTC) $(RUSTC_FLAGS) -C lto --emit obj -o $@ src/main.rs
+
+$(BUILD_DIR)/main.S: $(RUST_SOURCES) $(call libs,core support platform drivers)
+	@echo "Building $@"
+	@$(RUSTC) $(RUSTC_FLAGS) -C lto --emit asm -o $@ src/main.rs
+
+$(BUILD_DIR)/main.ir: $(RUST_SOURCES) $(call libs,core support platform drivers)
+	@echo "Building $@"
+	@$(RUSTC) $(RUSTC_FLAGS) -C lto --emit llvm-ir -o $@ src/main.rs
 
 $(BUILD_DIR)/main.elf: $(BUILD_DIR)/main.o $(APP_OBJECTS) $(C_OBJECTS) $(ASM_OBJECTS)
 	@echo "Linking $@"
