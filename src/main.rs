@@ -5,6 +5,7 @@
 
 #[plugin] #[no_link]
 extern crate plugins;
+#[macro_use(panic)]
 extern crate core;
 extern crate drivers;
 extern crate platform;
@@ -67,8 +68,6 @@ unsafe fn svc_and_registers(psp: *const usize) -> (u16, usize, usize, usize) {
 
 #[no_mangle]
 pub extern fn main() {
-    use core::prelude::*;
-
     let mut proc_list = unsafe {
         task::setup();
         config::config();
@@ -83,8 +82,7 @@ pub extern fn main() {
     let cmd_drivers = unsafe { &syscall::CMD_DRIVERS };
 
     loop {
-        for i in range(0, proc_list.len()) {
-            let process = &mut proc_list[i];
+        for process in proc_list.iterator() {
             let psp = unsafe {
                 syscall::switch_to_user(process.pc,
                     &mut process.memory[process.cur_stack])
