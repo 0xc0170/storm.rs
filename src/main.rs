@@ -37,7 +37,7 @@ extern {
     static _eapps: fn();
 }
 
-unsafe fn schedule_external_apps(proc_arr: &mut ArrayList<Process>) {
+unsafe fn load_apps(proc_arr: &mut ArrayList<Process>) {
 
     let (start_ptr, end_ptr) = (&_sapps as *const fn(), &_eapps as *const fn());
 
@@ -63,7 +63,7 @@ pub extern fn main() {
         
         let mut buf : [u8; 1024] = [0; 1024];
         let mut list = ArrayList::new(8, intrinsics::transmute(&mut buf));
-        schedule_external_apps(&mut list);
+        load_apps(&mut list);
         list
     };
 
