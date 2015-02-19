@@ -79,7 +79,7 @@ $(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf
 
 $(BUILD_DIR)/%.sdb: $(BUILD_DIR)/%.elf
 	@echo "Packing SDB..."
-	@$(SLOAD) pack -m "$(SDB_MAINTAINER)" -v "$(SDB_VERSION)" -n "$(SDB_NAME)" -d $(SDB_DESCRIPTION) -o $@ $<
+	#@$(SLOAD) pack -m "$(SDB_MAINTAINER)" -v "$(SDB_VERSION)" -n "$(SDB_NAME)" -d $(SDB_DESCRIPTION) -o $@ $<
 
 .PHONY: all program clean clean-all
 

@@ -22,6 +22,7 @@
 
 #![crate_name = "support"]
 #![crate_type = "rlib"]
+#![feature(no_std)]
 #![no_std]
 #![feature(asm,lang_items,core)]
 
